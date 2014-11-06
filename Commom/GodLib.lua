@@ -7,16 +7,6 @@
 	Library:	GodLib
 	Version:	0.01
 	Author:		Devn
-
----//==================================================\\---
---|| Changelog                                          ||--
----\\==================================================//---
-
-	Version 0.01:
-		- Initial library release.
-		- Compatability added for:
-			- AnnieGod
-				- Basic script.
 	
 --]]
 
@@ -101,8 +91,17 @@ end
 --|| Script Setup                                       ||--
 ---\\==================================================//---
 
+function __CheckForUpdate()
+
+	if (GodLib.AutoUpdate) then
+		SourceUpdater(GodLib.ScriptName, GodLib.ScriptVersion, "raw.githubusercontent.com", "/DevnScripts/BoL-Scripts/master/"..GodLib.ScriptName..".lua", LIB_PATH..GetCurrentEnv().FILE_NAME, "/DevnScripts/BoL-Scripts/master/Versions/"..GodLib.ScriptName..".version"):CheckUpdate()
+	end
+
+end
+
 function StartScript()
 
+	__CheckForUpdate()
 	__SetupTracker()
 	
 	__SetupVariables()
