@@ -7,16 +7,6 @@
 	Script:		AnnieGod
 	Version:	0.01
 	Author:		Devn
-
----//==================================================\\---
---|| Changelog                                          ||--
----\\==================================================//---
-
-	Version 0.01:
-		- Basic script release.
-		- Features:
-			- Orbwalking
-				- SOW
 	
 --]]
 
@@ -37,7 +27,7 @@ if (FileExist(LIB_PATH.."GodLib.lua")) then
 	require("GodLib")
 	if (not GodLib.Loaded) then return end
 else
-	DownloadFile("", LIB_PATH.."GodLib.lua", function()
+	DownloadFile("https://raw.githubusercontent.com/DevnScripts/BoL-Scripts/master/Commom/GodLib.lua", LIB_PATH.."GodLib.lua", function()
 		PrintChat("AnnieGod: GodLib downloaded succesfully! Please reload the script (double F9).")
 	end)
 	PrintChat("AnnieGod: Downloading GodLib...")
