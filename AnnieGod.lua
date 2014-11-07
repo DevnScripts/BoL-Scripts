@@ -5,7 +5,7 @@
 ---\\==================================================//---
 
 	Script:		AnnieGod
-	Version:	0.01
+	Version:	0.02
 	Author:		Devn
 	
 --]]
@@ -27,7 +27,7 @@ if (FileExist(LIB_PATH.."GodLib.lua")) then
 	require("GodLib")
 	if (not GodLib.Loaded) then return end
 else
-	DownloadFile("https://raw.githubusercontent.com/DevnScripts/BoL-Scripts/master/Commom/GodLib.lua", LIB_PATH.."GodLib.lua", function()
+	DownloadFile("https://raw.githubusercontent.com/DevnScripts/BoL-Scripts/master/Common/GodLib.lua", LIB_PATH.."GodLib.lua", function()
 		PrintChat("AnnieGod: GodLib downloaded succesfully! Please reload the script (double F9).")
 	end)
 	PrintChat("AnnieGod: Downloading GodLib...")
@@ -40,24 +40,41 @@ end
 
 function SetupVariables()
 
-	Tibbers		= nil
-	StunReady	= false
-
 	SetupTargetSelector(STS_PRIORITY_LESS_CAST_MAGIC)
 	
-	SetupSpell(_Q, "Disintegrate", 625, -1, 0.25, 1400)
-	SetupSpell(_W, "Incinerate", 625, 50 * math.pi / 180, 0.25, math.huge, SKILLSHOT_CONE, false, true)
-	SetupSpell(_E, "Molten Shield", -1, -1, 0.5, -1)
-	SetupSpell(_R, "Summon: Tibbers", 600, 290, 0.25, math.huge, SKILLSHOT_CIRCULAR, false, true)
+	SetupSpell(_Q, "Disintegrate",    625, -1,                 0.25, 1400)
+	SetupSpell(_W, "Incinerate",      625, 50 * math.pi / 180, 0.25, math.huge, SKILLSHOT_CONE,     false, true)
+	SetupSpell(_E, "Molten Shield",   -1,  -1,                 0.50, -1)
+	SetupSpell(_R, "Summon: Tibbers", 600, 290,                0.25, math.huge, SKILLSHOT_CIRCULAR, false, true)
 	
-	AddDrawing("Spell Ranges", "Draw "..Spells[_Q].Name.." (Q) Range", myHero, Spells[_Q].Range, true, function() Spells[_Q]:IsReady() end)
-	AddDrawing("Spell Ranges", "Draw "..Spells[_R].Name.." (R) Range", myHero, Spells[_R].Range + (Spells[_R].Radius / 2), true, function() Spells[_Q]:IsReady() end)
+	AddDrawing("Spell Ranges", Spells[_Q].Name.." (Q) Range", myHero, Spells[_Q].Range, true, function() Spells[_Q]:IsReady() end)
+	AddDrawing("Spell Ranges", Spells[_R].Name.." (R) Range", myHero, Spells[_R].Range + (Spells[_R].Radius / 2), true, function() Spells[_Q]:IsReady() end)
 	
-	AddMinionManager("Enemy", MINION_ENEMY, Spells[_Q].Range, myHero, MINION_SORT_HEALTH_ASC)
+	AddMinionManager("Enemy",  MINION_ENEMY,  Spells[_Q].Range, myHero, MINION_SORT_HEALTH_ASC)
+	AddMinionManager("Jungle", MINION_JUNGLE, Spells[_Q].Range, myHero, MINION_SORT_MAXHEALTH_DEC)
 	
-	RegisterDamageSource(_Q, _MAGIC, 45, 35, _MAGIC, _AP, 0.8, function() return Spells[_Q]:IsReady() end)
-	RegisterDamageSource(_W, _MAGIC, 25, 45, _MAGIC, _AP, 0.85, function() return Spells[_W]:IsReady() end)
-	RegisterDamageSource(_R, _MAGIC, 85, 125, _MAGIC, _AP, 1.0, function() return Spells[_R]:IsReady() and not Tibbers end)
+	RegisterDamageSource(_Q, _MAGIC, 45, 035, _MAGIC, _AP, 0.80, function() return Spells[_Q]:IsReady() end)
+	RegisterDamageSource(_W, _MAGIC, 25, 045, _MAGIC, _AP, 0.85, function() return Spells[_W]:IsReady() end)
+	RegisterDamageSource(_R, _MAGIC, 85, 125, _MAGIC, _AP, 1.00, function() return Spells[_R]:IsReady() and not Tibbers end)
+	
+	AddLevelSequence("R > Q > W > E",     { _Q, _W, _Q, _E, _Q, _R, _Q, _W, _Q, _W, _R, _W, _W, _E, _E, _R, _E, _E })
+	AddLevelSequence("R > W > Q > E",     { _W, _Q, _W, _E, _W, _R, _W, _Q, _W, _Q, _R, _Q, _Q, _E, _E, _R, _E, _E })
+	AddLevelSequence("R > Mixed Q/W > E", { _Q, _W, _Q, _E, _W, _R, _Q, _W, _W, _W, _R, _Q, _Q, _E, _E, _R, _E, _E })
+	
+	Tibbers			= nil
+	StunReady		= false
+	
+	ScoutRange		= Spells[_Q].Range
+	
+	Combos			= {
+		{ Text = "Q",     Range = Spells[_Q].Range, Sequence = { _Q }},
+		{ Text = "W",     Range = Spells[_W].Range, Sequence = { _W }},
+		{ Text = "Q>W",   Range = Spells[_W].Range, Sequence = { _Q, _W }},
+		{ Text = "R",     Range = Spells[_R].Range, Sequence = { _R }},
+		{ Text = "Q>R",   Range = Spells[_Q].Range, Sequence = { _Q, _R }},
+		{ Text = "W>R",   Range = Spells[_W].Range, Sequence = { _W, _R }},
+		{ Text = "Q>W>R", Range = Spells[_W].Range, Sequence = { _Q, _W, _R }},
+	}
 	
 	-- Setup variable trackers.
 	AddVariableTracker("Stun Ready", function() return StunReady end)
@@ -66,29 +83,36 @@ end
 
 function SetupConfig()
 
-	AddConfigSubMenu("Auto Spells", "AutoSpells")
+	AddSubMenu(Config, "Auto Spells", "AutoSpells")
 	AddTitleRow(Config.AutoSpells, "Charge Stun")
 	Config.AutoSpells:addParam("ChargeStunBase", "Use W and E to Charge Stun in Base", SCRIPT_PARAM_ONOFF, true)
 	
-	--AddConfigSubMenu("Auto-Interrupt", "AutoInterrupt")
+	--AddSubMenu(Config, "Auto-Interrupt", "AutoInterrupt")
 	
-	--AddConfigSubMenu("Killstealing", "Killstealing")
+	--AddSubMenu(Config, "Killstealing", "Killstealing")
 	
-	--AddConfigSubMenu("Combo Mode", "Combo")
+	AddSubMenu(Config, "Combo Mode", "Combo")
+	AddTitleRow(Config.Combo, "Spells")
+	Config.Combo:addParam("UseQ", "Use "..Spells[_Q].Name.." (Q)", SCRIPT_PARAM_ONOFF, true)
+	Config.Combo:addParam("UseW", "Use "..Spells[_Q].Name.." (W)", SCRIPT_PARAM_ONOFF, true)
+	Config.Combo:addParam("UseR", "Use "..Spells[_Q].Name.." (R)", SCRIPT_PARAM_ONOFF, true)
 	
-	--AddConfigSubMenu("Harass Mode", "Harass")
+	--AddSubMenu(Config, "Harass Mode", "Harass")
 	
-	AddConfigSubMenu("Last-Hit Mode", "LastHit")
+	AddSubMenu(Config, "Last-Hit Mode", "LastHit")
 	AddTitleRow(Config.LastHit, "Spells")
 	Config.LastHit:addParam("UseQ", "Use "..Spells[_Q].Name.." (Q)", SCRIPT_PARAM_ONOFF, true)
+	AddEmptyRow(Config.LastHit)
+	AddTitleRow(Config.LastHit, "Q Conditions")
+	Config.LastHit:addParam("QStunNotReady", "If Stun Not Ready", SCRIPT_PARAM_ONOFF, true)
 	
-	--AddConfigSubMenu("Mixed Mode", "Mixed")
+	--AddSubMenu(Config, "Mixed Mode", "Mixed")
 	
-	--AddConfigSubMenu("Lane-Clear Mode", "LaneClear")
+	--AddSubMenu(Config, "Lane-Clear Mode", "LaneClear")
 	
 	AddEmptyRow(Config)
 	AddTitleRow(Config, "Hotkeys")
-	--Config:addParam("ComboActive", "Combo Mode", SCRIPT_PARAM_ONKEYDOWN, false, 32)
+	Config:addParam("ComboActive", "Combo Mode", SCRIPT_PARAM_ONKEYDOWN, false, 32)
 	--Config:addParam("HarassActive", "Harass Mode", SCRIPT_PARAM_ONKEYDOWN, false, string.byte("A"))
 	Config:addParam("LastHitActive", "Last-Hit Mode", SCRIPT_PARAM_ONKEYDOWN, false, string.byte("Z"))
 	--Config:addParam("MixedActive", "Mixed Mode", SCRIPT_PARAM_ONKEYDOWN, false, string.byte("X"))
@@ -146,8 +170,41 @@ end
 
 function HandlePerforms()
 
-	if (Config.LastHitActive) then
+	if (Config.ComboActive) then
+		PerformCombo()
+	elseif (Config.LastHitActive) then
 		PerformLastHit()
+	end
+
+end
+
+function PerformCombo()
+
+	-- Check for a valid target.
+	if (not ValidTarget(CurrentTarget)) then return end
+	
+	-- Check if theres a combo to kill target.
+	local combo = GetKillableCombo(CurrentTarget, Combos)
+	if (combo) then
+		if (CanCastCombo(combo, CurrentTarget)) then
+			CastSpells(combo, CurrentTarget)
+			return
+		end
+	end
+	
+	-- Check if user wants to cast R.
+	if (Config.Combo.UseR and StunReady and Spells[_R]:IsReady()) then
+		Spells[_R]:Cast(CurrentTarget)
+	end
+	
+	-- Check if user wants to cast Q.
+	if (Config.Combo.UseQ and Spells[_Q]:IsReady()) then
+		Spells[_Q]:Cast(CurrentTarget)
+	end
+	
+	-- Check if user wants to cast W.
+	if (Config.Combo.UseW and Spells[_W]:IsReady()) then
+		Spells[_W]:Cast(CurrentTarget)
 	end
 
 end
@@ -169,19 +226,21 @@ function PerformLastHit()
 	end
 	
 	-- Make sure there is a valid minion near hero.
-	if (not targetMinion) then return end
+	if (targetMinion) then
 	
-	-- Check if user wants to use Q to farm and if it can be used and will kill minion.
-	if (Config.LastHit.UseQ and Spells[_Q]:IsReady()) then
-		local delay = Spells[_Q].Delay + GetDistance(targetMinion.visionPos, myHero.visionPos) / Spells[_Q].Speed - 0.07
-		local predictedHealth = Prediction:GetPredictedHealth(targetMinion, delay)
-		if (predictedHealth <= DamageCalc:CalcSpellDamage(targetMinion, _Q) and predictedHealth > 0) then
-			CastSpells({ _Q }, targetMinion)
+		-- Check if user wants to use Q to farm and if it can be used and will kill minion.
+		if (Config.LastHit.UseQ and Spells[_Q]:IsReady()) then
+			-- Check if user wants to save stun.
+			if (not Config.LastHit.QStunNotReady or not StunReady) then
+				local delay = Spells[_Q].Delay + GetDistance(targetMinion.visionPos, myHero.visionPos) / Spells[_Q].Speed - 0.07
+				local predictedHealth = Prediction:GetPredictedHealth(targetMinion, delay)
+				if (predictedHealth <= DamageCalc:CalcSpellDamage(targetMinion, _Q) and predictedHealth > 0) then
+					Spells[_Q]:Cast(targetMinion)
+				end
+			end
 		end
+		
 	end
-
-	-- Do SOW orbwalk.
-	Orbwalk(3)
 
 end
 
@@ -191,7 +250,7 @@ end
 
 -- Variables required by GodLib to run the script correctly.
 GodLib.ScriptName		= "AnnieGod"
-GodLib.ScriptVersion	= 0.01
+GodLib.ScriptVersion	= 0.02
 GodLib.TrackerID		= 25
 GodLib.AutoUpdate		= AutoUpdate
 GodLib.AllowTracker		= AllowTracker
@@ -202,5 +261,5 @@ GodLib.SetupConfig		= SetupConfig
 StartScript()
 
 -- Start script functions with appropriate frequencies.
-TickLimiter(function() ChargeStun() end, 2)			-- Frequency of 2 because it won't be called that much and is a waste of resources.
-TickLimiter(function() HandlePerforms() end, 10)
+TickLimiter(function() ChargeStun() end, 5)
+TickLimiter(function() HandlePerforms() end, 30)
