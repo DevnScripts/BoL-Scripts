@@ -5,7 +5,7 @@
 ---\\==================================================//---
 
 	Library:	GodLib
-	Version:	0.01
+	Version:	0.02
 	Author:		Devn
 	
 --]]
@@ -30,7 +30,9 @@ function __GodLib:__init()
 
 	self.AutoUpdate		= true
 	self.AllowTracker	= true
+	self.GameEnded		= false
 	self.ScriptName		= "GodSeries - Unknown Name"
+	self.LibVersion		= 0.02
 	self.ScriptVersion	= 0.00
 	self.TrackerID		= 0
 	self.TrackerHWID	= Base64Encode(tostring(os.getenv("PROCESSOR_IDENTIFIER")..os.getenv("USERNAME")..os.getenv("COMPUTERNAME")..os.getenv("PROCESSOR_LEVEL")..os.getenv("PROCESSOR_REVISION")))
@@ -42,6 +44,8 @@ function __GodLib:__init()
 	self.__DrawingGroups	= { }
 	self.__SpellCallbacks	= { }
 	self.__VariableTracker	= { }
+	
+	self.__AvailableOrbwalkers	= { "SOW" }
 	
 end
 
@@ -94,6 +98,7 @@ end
 function __CheckForUpdate()
 
 	if (GodLib.AutoUpdate) then
+		SourceUpdater("GodLib",          GodLib.LibVersion,    "raw.githubusercontent.com", "/DevnScripts/BoL-Scripts/master/Commom/GodLib.lua",           LIB_PATH.."GodLib.lua",              "/DevnScripts/BoL-Scripts/master/Versions/GodLib.version"):SetSilent(true):CheckUpdate()
 		SourceUpdater(GodLib.ScriptName, GodLib.ScriptVersion, "raw.githubusercontent.com", "/DevnScripts/BoL-Scripts/master/"..GodLib.ScriptName..".lua", LIB_PATH..GetCurrentEnv().FILE_NAME, "/DevnScripts/BoL-Scripts/master/Versions/"..GodLib.ScriptName..".version"):CheckUpdate()
 	end
 
@@ -117,16 +122,24 @@ function StartScript()
 end
 
 function __SetupTracker()
-	if (GodLib.AllowTracker) then
+
+	if (GodLib.AllowTracker and GodLib.TrackerID ~= 0) then
 		assert(load(Base64Decode("G0x1YVIAAQQEBAgAGZMNChoKAAAAAAAAAAAAAQIDAAAAJQAAAAgAAIAfAIAAAQAAAAQKAAAAVXBkYXRlV2ViAAEAAAACAAAADAAAAAQAETUAAAAGAUAAQUEAAB2BAAFGgUAAh8FAAp0BgABdgQAAjAHBAgFCAQBBggEAnUEAAhsAAAAXwAOAjMHBAgECAgBAAgABgUICAMACgAEBgwIARsNCAEcDwwaAA4AAwUMDAAGEAwBdgwACgcMDABaCAwSdQYABF4ADgIzBwQIBAgQAQAIAAYFCAgDAAoABAYMCAEbDQgBHA8MGgAOAAMFDAwABhAMAXYMAAoHDAwAWggMEnUGAAYwBxQIBQgUAnQGBAQgAgokIwAGJCICBiIyBxQKdQQABHwCAABcAAAAECAAAAHJlcXVpcmUABAcAAABzb2NrZXQABAcAAABhc3NlcnQABAQAAAB0Y3AABAgAAABjb25uZWN0AAQQAAAAYm9sLXRyYWNrZXIuY29tAAMAAAAAAABUQAQFAAAAc2VuZAAEGAAAAEdFVCAvcmVzdC9uZXdwbGF5ZXI/aWQ9AAQHAAAAJmh3aWQ9AAQNAAAAJnNjcmlwdE5hbWU9AAQHAAAAc3RyaW5nAAQFAAAAZ3N1YgAEDQAAAFteMC05QS1aYS16XQAEAQAAAAAEJQAAACBIVFRQLzEuMA0KSG9zdDogYm9sLXRyYWNrZXIuY29tDQoNCgAEGwAAAEdFVCAvcmVzdC9kZWxldGVwbGF5ZXI/aWQ9AAQCAAAAcwAEBwAAAHN0YXR1cwAECAAAAHBhcnRpYWwABAgAAAByZWNlaXZlAAQDAAAAKmEABAYAAABjbG9zZQAAAAAAAQAAAAAAEAAAAEBvYmZ1c2NhdGVkLmx1YQA1AAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAMAAAADAAAAAwAAAAMAAAAEAAAABAAAAAUAAAAFAAAABQAAAAYAAAAGAAAABwAAAAcAAAAHAAAABwAAAAcAAAAHAAAABwAAAAgAAAAHAAAABQAAAAgAAAAJAAAACQAAAAkAAAAKAAAACgAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAAMAAAACwAAAAkAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAMAAAADAAAAAwAAAAGAAAAAgAAAGEAAAAAADUAAAACAAAAYgAAAAAANQAAAAIAAABjAAAAAAA1AAAAAgAAAGQAAAAAADUAAAADAAAAX2EAAwAAADUAAAADAAAAYWEABwAAADUAAAABAAAABQAAAF9FTlYAAQAAAAEAEAAAAEBvYmZ1c2NhdGVkLmx1YQADAAAADAAAAAIAAAAMAAAAAAAAAAEAAAAFAAAAX0VOVgA="), nil, "bt", _ENV))()
 		UpdateWeb(true, GodLib.ScriptName, GodLib.TrackerID, GodLib.TrackerHWID)
 	end
+	
 end
 
 function __SetupVariables()
 
+	CurrentTarget	= nil
+	Recalling		= false
 	Spells			= { }
 	Minions			= { }
+	Enemies			= { }
+	LevelSequences	= { }
+	LastLevel		= myHero.level - 1
+	ScoutRange		= myHero.range
 	TargetSelector	= SimpleTS()
 	Prediction		= VPrediction()
 	Orbwalker		= SOW(Prediction)
@@ -154,30 +167,31 @@ function __SetupConfig()
 
 	Config	= scriptConfig(GodLib.ScriptName.." (Version "..GodLib.ScriptVersion..")", "GodLib_"..GodLib.ScriptName)
 	
-	AddConfigSubMenu("Target Selector", "TargetSelector")
+	AddSubMenu(Config, "Target Selector", "TargetSelector")
 	TargetSelector:AddToMenu(Config.TargetSelector)
 	
-	AddConfigSubMenu("Orbwalker", "Orbwalker")
+	AddSubMenu(Config, "Orbwalker", "Orbwalker")
 	Orbwalker:LoadToMenu(Config.Orbwalker)
 	
-	--[[
-	AddConfigSubMenu("Drawing", "Drawing")
+	AddSubMenu(Config, "Drawing", "Drawing")
 	Config.Drawing:addParam("Enabled", "Enabled", SCRIPT_PARAM_ONOFF, true)
 	AddEmptyRow(Config.Drawing)
 	AddTitleRow(Config.Drawing, "Heroes")
-	Config.Drawing:addParam("MyRange", "My Range", SCRIPT_PARAM_ONOFF, true)
+	AddDrawingConfig(Config.Drawing, "MyRange", "My Range", true)
+	AddDrawingConfig(Config.Drawing, "CurrentTarget", "Current Target", true, true, 150, 50, 300)
+	--[[
 	if (#GodLib.__DrawingGroups > 0) then
 		for _, data in ipairs(GodLib.__DrawingGroups) do
 			AddEmptyRow(Config.Drawing)
 			AddTitleRow(Config.Drawing, data.Name)
 			for i, drawing in ipairs(GodLib.__CustomDrawing[data.SafeName]) do
-				Config.Drawing:addParam("CustomDrawing0"..data.SafeName.."0"..tostring(i), drawing.Name, SCRIPT_PARAM_ONOFF, drawing.Default)
+				AddDrawingConfig(Config.Drawing, "CustomDrawing"..data.SafeName..tostring(i), drawing.Name, drawing.Default)
 			end
 		end
 	end
 	--]]
 	
-	AddConfigSubMenu("Extra", "Extra")
+	AddSubMenu(Config, "Extra", "Extra")
 	Config.Extra:addParam("VariableTracker", "Show Variable Tracker", SCRIPT_PARAM_ONOFF, false)
 	
 	--[[
@@ -185,13 +199,43 @@ function __SetupConfig()
 	AddTitleRow(Config, "Auto-Level")
 	Config:addParam("AutoLevel", "Enabled", SCRIPT_PARAM_ONOFF, false)
 	Config["AutoLevel"] = false
-	Config:addParam("AutoLevelRoute", "Skill Order", SCRIPT_PARAM_LIST, 1, { "R > Q > W > E", "R > W > Q > E", "Mixed" })
+	local levelSequences = { }
+	for _, levelSequence in ipairs(LevelSequences) do
+		table.insert(levelSequences, levelSequence.Name)
+	end
+	Config:addParam("AutoLevelRoute", "Skill Order", SCRIPT_PARAM_LIST, 1, levelSequences)
 	--]]
 	
 end
 
 function __SetupExtras()
 
+	-- Setup enemy table.
+	for i = 1, heroManager.iCount do
+		local enemy = heroManager:GetHero(i)
+		if (enemy.team ~= myHero.team) then
+			table.insert(Enemies, { Hero = enemy, Text = "", Spells = { } })
+		end
+	end
+	
+	-- Check for SAC and MMA.
+	--[[
+	if (_G.Reborn_Loaded) then
+		PrintMessage("SAC: Reborn detected, disabling SOW.")
+		table.insert(GodLib.__AvailableOrbwalkers, "SAC: Reborn")
+	elseif (_G.MMA_Loaded) then
+		PrintMessage("MMA detected, disabling SOW.")
+		table.insert(GodLib.__AvailableOrbwalkers, "MMA")
+	elseif (_G.SxOrbMenu) then
+		PrintMessage("SxOrbwalk detected, disabling SOW.")
+		table.insert(GodLib.__AvailableOrbwalkers, "SxOrb")
+	end
+	--]]
+
+	-- Setup variable trackers.
+	AddVariableTracker("Current Target", function() return CurrentTarget end)
+
+	-- Setup enemy priorities.
 	local heroCount = #GetEnemyHeroes()
 	for i = 1, heroCount do
 		local enemy = heroManager:getHero(i)
@@ -210,6 +254,7 @@ function __SetupExtras()
 		end
 	end
 	
+	-- Setup library callbacks.
 	AddTickCallback(function() __OnTick() end)
 	AddDrawCallback(function() __OnDraw() end)
 	
@@ -219,25 +264,8 @@ end
 --|| Script Setup Functions                             ||--
 ---\\==================================================//---
 
-function SetupTargetSelector(mode)
-	if (TargetSelector.menu) then
-		TargetSelector.menu["mode"] = mode.id
-	else
-		GodLib.TargettingMode = mode
-	end
-end
-
 function SetupSpell(id, name, range, radius, delay, speed, stype, collision, aoe)
 	Spells[id] = __SpellData(id, name, range, radius, delay, speed, stype, collision, aoe)
-end
-
-function AddDrawing(group, name, location, range, default, condition)
-	local safeGroupName = RemoveAllSpaces(group)
-	if (not GodLib.__CustomDrawing[safeGroupName]) then
-		table.insert(GodLib.__DrawingGroups, { Name = group, SafeName = safeGroupName })
-		GodLib.__CustomDrawing[safeGroupName] = { }
-	end
-	table.insert(GodLib.__CustomDrawing[safeGroupName], { Name = name, Location = location, Range = range, Default = default, Condition = condition })
 end
 
 function AddSpellCallback(cb)
@@ -256,11 +284,56 @@ function RegisterDamageSource(p1, p2, p3, p4, p5, p6, p7, p8, p9)
 	DamageCalc:RegisterDamageSource(p1, p2, p3, p4, p5, p6, p7, p8, p9)
 end
 
+function AddLevelSequence(name, sequence)
+	table.insert(LevelSequences, { Name = name, Sequence = sequence })
+end
+
+function SetupTargetSelector(mode)
+
+	if (TargetSelector.menu) then
+		TargetSelector.menu["mode"] = mode.id
+	else
+		GodLib.TargettingMode = mode
+	end
+	
+end
+
+function AddDrawing(group, name, location, range, default, condition)
+
+	local safeGroupName = RemoveAllSpaces(group)
+	
+	if (not GodLib.__CustomDrawing[safeGroupName]) then
+		table.insert(GodLib.__DrawingGroups, { Name = group, SafeName = safeGroupName })
+		GodLib.__CustomDrawing[safeGroupName] = { }
+	end
+	
+	table.insert(GodLib.__CustomDrawing[safeGroupName], { Name = name, Location = location, Range = range, Default = default, Condition = condition })
+
+end
+
 ---//==================================================\\---
 --|| BoL Callback Functions                             ||--
 ---\\==================================================//---
 
 function __OnTick()
+
+	-- Check if game is already over.
+	if (GodLib.GameEnded) then return end
+	
+	-- Check if game has ended.
+	if (GetGame().isOver) then
+		UpdateWeb(false, GodLib.ScriptName, GodLib.TrackerID, GodLib.TrackerHWID)
+		GodLib.GameEnded = true
+	end
+	
+	-- Auto level spells.
+	if (myHero.level > LastLevel and Config.AutoLevel) then
+		LevelSpell(LevelSequences[Config.AutoLevelRoute][myHero.level])
+		LastLevel = myHero.level
+	end
+	
+	-- Update current target.
+	CurrentTarget = TargetSelector:GetTarget(ScoutRange)
 
 	-- Reset orbwalker mode.
 	Orbwalker.mode = -1
@@ -304,13 +377,21 @@ function __OnDraw()
 	-- Check if hero is dead or drawing is disabled.
 	if (myHero.dead or not Config.Drawing.Enabled) then return end
 				
-	if (Config.Drawing.MyRange) then
-		--DrawCircle(myHero.x, myHero.y, myHero.z, myHero.Range, ARGB(255, 0, 255, 0))
+	-- Draw hero range.
+	if (Config.Drawing.MyRangeEnabled) then
+		DrawCircle(myHero.x, myHero.y, myHero.z, GetTrueRange(myHero), GetRGB(Config.Drawing.MyRangeColor))
 	end
 	
+	-- Draw current target.
+	if (CurrentTarget and Config.Drawing.CurrentTargetEnabled) then
+		DrawCircle(CurrentTarget.x, CurrentTarget.y, CurrentTarget.z, Config.Drawing.CurrentTargetWidth, GetRGB(Config.Drawing.CurrentTargetColor))
+	end
+	
+	-- Draw script circles.
+	--[[
 	for _, data in pairs(GodLib.__DrawingGroups) do
 		for i, drawing in ipairs(GodLib.__CustomDrawing[data.SafeName]) do
-			if (Config.Drawing["CustomDrawing0"..data.SafeName.."0"..tostring(i)]) then
+			if (Config.Drawing["CustomDrawing"..data.SafeName..tostring(i)]) then
 				if ((type(drawing.Condition) == "function" and drawing:Condition()) or (type(drawing.Condition) == "boolean" and drawing.Condition)) then
 					local point
 					if (type(drawing.Location) == "function") then
@@ -318,11 +399,12 @@ function __OnDraw()
 					else
 						point = drawing.Location
 					end
-					--DrawCircle(point.x, point.y, point.z, drawing.Range, 0xF7FE2E)
+					DrawCircle(point.x, point.y, point.z, drawing.Range, GetRGB(Config.Drawing["CustomDrawing"..data.SafeName..tostring(i).."Color"]))
 				end
 			end
 		end
 	end
+	--]]
 
 end
 
@@ -330,8 +412,8 @@ end
 --|| Misc Script Functions                              ||--
 ---\\==================================================//---
 
-function AddConfigSubMenu(text, name)
-	Config:addSubMenu("Settings: "..text, name)
+function AddSubMenu(config, text, name)
+	config:addSubMenu("Settings: "..text, name)
 end
 
 function AddTitleRow(config, title)
@@ -346,6 +428,55 @@ function RemoveAllSpaces(str)
 	return string.gsub(str, "%s+", "")
 end
 
+function GetTrueRange(unit)
+	return unit.range + GetDistance(unit, unit.minBBox)
+end
+
+function GetRGB(array)
+	return RGB(array[2], array[3], array[4])
+end
+
+function HaveEnoughMana(id)
+	return myHero.mana >= Spells[id]:GetManaCost()
+end
+
+function IsInRange(from, target, range)
+	return range * range >= _GetDistanceSqr(target, from)
+end
+
+function AddDrawingConfig(config, name, title, default, customWidth, widthCurrent, widthMin, widthMax)
+
+	config:addParam(name.."Enabled", title.." Enabled", SCRIPT_PARAM_ONOFF, default)
+	config:addParam(name.."Color",   title.." Color",   SCRIPT_PARAM_COLOR, { 255, 255, 255, 255 })
+	
+	if (customWidth) then
+		config:addParam(name.."Width", title.." Width", SCRIPT_PARAM_SLICE, widthCurrent, widthMin, widthMax)
+	end
+	
+end
+
+function GetKillableCombo(target, combos)
+
+	for _, combo in ipairs(combos) do
+		if (DamageCalc:IsKillable(target, combo.Sequence)) then
+			return combo
+		end
+	end
+
+end
+
+function CanCastCombo(combo, target)
+
+	for _, id in ipairs(combo.Sequence) do
+		if (not HaveEnoughMana(id) or not IsInRange(myHero, target, combo.Range)) then
+			return false
+		end
+	end
+	
+	return true
+
+end
+
 function GetTableCount(tbl)
 
 	local count = 0
@@ -355,43 +486,6 @@ function GetTableCount(tbl)
 	end
 	
 	return count
-	
-end
-
-function Orbwalk(mode, target)
-	
-	if (not Config.Orbwalker.Enabled) then return end
-	
-	if (not mode and not target) then
-		Orbwalker:OrbWalk()
-	end
-	
-	if (mode == 0) then
-	
-		if (Config.Orbwalker.Attack == 2) then
-			Orbwalker:OrbWalk(target)
-		else
-			Orbwalker:OrbWalk()
-		end
-		
-		Orbwalker.mode = 0
-		
-	elseif (mode == 1) then
-	
-		Orbwalker:Farm(1)
-		Orbwalker.mode = 1
-		
-	elseif (mode == 2) then
-	
-		Orbwalker:Farm(2)
-		Orbwalker.mode = 2
-		
-	elseif (mode == 3) then
-	
-		Orbwalker:Farm(3)
-		Orbwalker.mode = 3
-		
-	end
 	
 end
 
@@ -429,6 +523,10 @@ class "__SpellData" --{
 			self.__Base:SetAOE(aoe, false)
 		end
 		
+	end
+	
+	function __SpellData:GetManaCost()
+		return self.__Base:GetManaUsage()
 	end
 	
 	function __SpellData:IsReady()
@@ -501,24 +599,39 @@ end
 
 function SOW:LoadToMenu(menu)
 
-	self.STS = TargetSelector
-	self.STS.VP = Prediction
+	self.STS		= TargetSelector
+	self.STS.VP		= Prediction
+	local enabled	= #GodLib.__AvailableOrbwalkers == 1 and true or false
 	
-	menu:addParam("Enabled", "Enabled", SCRIPT_PARAM_ONOFF, true)
+	menu:addParam("Current", "Current Orbwalker", SCRIPT_PARAM_LIST, #GodLib.__AvailableOrbwalkers, GodLib.__AvailableOrbwalkers)
+	AddEmptyRow(menu)
+	AddTitleRow(menu, "SOW Settings")
+	menu:addParam("Enabled", "Enabled", SCRIPT_PARAM_ONOFF, enabled)
 	menu:addParam("Attack", "Enable Attacks", SCRIPT_PARAM_LIST, 2, { "Only Farming", "Farming & Fighting" })
 	menu:addParam("Mode", "Orbwalking Mode", SCRIPT_PARAM_LIST, 1, { "To Mouse", "To Target" })
-	menu:addParam("nil", "", SCRIPT_PARAM_INFO, "")
-	menu:addParam("nil", "----- Settings -----", SCRIPT_PARAM_INFO, "")
 	menu:addParam("FarmDelay", "Farm Delay", SCRIPT_PARAM_SLICE, -150, 0, 150)
 	menu:addParam("ExtraWindUpTime", "Extra WindUp Time", SCRIPT_PARAM_SLICE, -150, 0, 150)
+	AddEmptyRow(menu)
+	AddTitleRow(menu, "SOW Hotkeys")
+	menu:addParam("Mode0", "Auto Carry", SCRIPT_PARAM_ONKEYDOWN, false, 32)
+	self.Mode0ParamID = #menu._param
+	menu:addParam("Mode1", "Mixed Mode", SCRIPT_PARAM_ONKEYDOWN, false, string.byte("C"))
+	self.Mode1ParamID = #menu._param
+	menu:addParam("Mode3", "Last-Hit", SCRIPT_PARAM_ONKEYDOWN, false, string.byte("X"))
+	self.Mode3ParamID = #menu._param
+	menu:addParam("Mode2", "Lane-Clear", SCRIPT_PARAM_ONKEYDOWN, false, string.byte("V"))
+	self.Mode2ParamID = #menu._param
+
+	menu._param[self.Mode3ParamID].key = GetSave("SOW").Mode3
+	menu._param[self.Mode2ParamID].key = GetSave("SOW").Mode2
+	menu._param[self.Mode1ParamID].key = GetSave("SOW").Mode1
+	menu._param[self.Mode0ParamID].key = GetSave("SOW").Mode0
 	
 	menu.FarmDelay = GetSave("SOW").FarmDelay
 	menu.ExtraWindUpTime = GetSave("SOW").ExtraWindUpTime
 	
-	AddTickCallback(function()
-		GetSave("SOW").FarmDelay = self.Menu.FarmDelay
-		GetSave("SOW").ExtraWindUpTime = self.Menu.ExtraWindUpTime
-	end)
+	AddTickCallback(function() self:OnTick() end)
+	AddTickCallback(function() self:CheckConfig() end)
 	
 	self.Menu = menu
 	
