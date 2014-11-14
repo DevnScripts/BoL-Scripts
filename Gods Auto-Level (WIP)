@@ -1,0 +1,202 @@
+--[[
+
+---//==================================================\\---
+--|| Information										||--
+---\\==================================================//---
+
+	Script:		Gods Auto-Level
+	Version:	1.00
+	Author:		Devn
+
+---//==================================================\\---
+--|| Changelog											||--
+---\\==================================================//---
+
+	Version 1.00
+		- Initial script release.
+		- Simple skill order settings.
+
+---//==================================================\\---
+--|| Work-in-Progress									||--
+---\\==================================================//---
+
+	- Add premade level options for ALL champions.
+
+--]]
+
+---//==================================================\\---
+--|| Main Script										||--
+---\\==================================================//---
+
+local TickInterval		= 1
+local LastLevel			= 0
+local SavedOrders		= GetSave("GodsAL").SavedOrders or { }
+
+local BeforeFourOrders	= {
+	{ Name = "Q > W > Q > E", Sequence = { _Q, _W, _Q, _E } },
+	{ Name = "Q > W > E > Q", Sequence = { _Q, _W, _E, _Q } },
+	{ Name = "Q > E > Q > W", Sequence = { _Q, _E, _Q, _W } },
+	{ Name = "Q > E > W > Q", Sequence = { _Q, _E, _W, _Q } },
+	{ Name = "W > Q > W > E", Sequence = { _W, _Q, _W, _E } },
+	{ Name = "W > Q > E > W", Sequence = { _W, _Q, _E, _W } },
+	{ Name = "W > E > W > Q", Sequence = { _W, _E, _W, _Q } },
+	{ Name = "W > E > Q > W", Sequence = { _W, _E, _Q, _W } },
+	{ Name = "E > Q > E > W", Sequence = { _E, _Q, _E, _W } },
+	{ Name = "E > Q > W > E", Sequence = { _E, _Q, _W, _E } },
+	{ Name = "E > W > E > Q", Sequence = { _E, _W, _E, _Q } },
+	{ Name = "E > W > Q > E", Sequence = { _E, _W, _Q, _E } },
+}
+
+local AfterFourOrders	= {
+	["R > Q > W > E"]	= { _R, _Q, _W, _E },
+	["R > Q > E > W"]	= { _R, _Q, _E, _W },
+	["R > W > Q > E"]	= { _R, _W, _Q, _E },
+	["R > W > E > Q"]	= { _R, _W, _E, _Q },
+	["R > E > Q > W"]	= { _R, _E, _Q, _W },
+	["R > E > W > Q"]	= { _R, _E, _W, _Q },
+}
+
+function OnLoad()
+
+	if (not SavedOrders[myHero.charName]) then
+		SavedOrders[myHero.charName] = {
+			["B4O"] = 1,
+			["A4O"]	= 1
+		}
+	end
+
+	Config = scriptConfig("Gods Auto-Level", "GodsAL")
+	
+	Config:addParam("B4O", "Before Level Four Order:", SCRIPT_PARAM_LIST, SavedOrders[myHero.charName]["B4O"], GetTableKeys(BeforeFourOrders))
+	Config:addParam("A4O", "After Level Four Order:", SCRIPT_PARAM_LIST, SavedOrders[myHero.charName]["A4O"], GetTableKeys(AfterFourOrders))
+	Config:addParam("nil", "", SCRIPT_PARAM_INFO, "")
+	Config:addParam("B4E", "Before Level Four Enabled", SCRIPT_PARAM_ONOFF, false)
+	Config:addParam("A4E", "After Level Four Enabled", SCRIPT_PARAM_ONOFF, false)
+	
+	Config.B4E = false
+	Config.A4E = false
+	
+	TickLimiter(AutoLevel, TickInterval)
+	
+	PrintChat("<font color=\"#81BEF7\">Gods Auto-Level:</font> <font color=\"#00FF00\">Loaded successfully!</font>")
+
+end
+
+function AutoLevel()
+
+	if (myHero.level <= LastLevel) then return end
+
+	if (Config["B4E"] and myHero.level <= 4) then
+	
+		local qLevel = myHero:GetSpellData(_Q).level
+		local wLevel = myHero:GetSpellData(_W).level
+		local eLevel = myHero:GetSpellData(_E).level
+		
+		if (qLevel + wLevel + eLevel == myHero.level -1) then
+			LevelSpell(BeforeFourOrders[Config.B4O].Sequence[myHero.level])
+		else
+			
+			local wQLevel, wWLevel, wELevel, _ = GetWantedLevels(BeforeFourOrders[Config.B4O].Sequence)
+			
+			while (qLevel ~= wQLevel) do
+				LevelSpell(_Q)
+				qLevel = qLevel + 1
+			end
+			
+			while (wLevel ~= wWLevel) do
+				LevelSpell(_W)
+				wLevel = wLevel + 1
+			end
+			
+			while (eLevel ~= wELevel) do
+				LevelSpell(_E)
+				eLevel = eLevel + 1
+			end
+			
+		end
+		
+	elseif (Config.A4E and myHero.level > 4) then
+		
+		-- To be added.
+		
+	else
+		return
+	end
+			
+	LastLevel = myHero.level
+
+end
+
+function OnUnload()
+
+	SavedOrders[myHero.charName] = {
+		["B4O"] = Config.B4O,
+		["A4O"] = Config.A4O,
+	}
+	
+	GetSave("GodsAL").SavedOrders = SavedOrders
+	
+end
+
+function GetTableKeys(array)
+	
+	local keys = { }
+	
+	for _, data in ipairs(array) do
+		table.insert(keys, data.Name)
+	end
+	
+	return keys
+	
+end
+
+function GetWantedLevels(sequence)
+
+	local qLevel = 0
+	local wLevel = 0
+	local eLevel = 0 
+	local rLevel = 0
+
+	for _, spell in ipairs(sequence) do
+		if (spell == _Q) then
+			qLevel = qLevel + 1
+		elseif (spell == _W) then
+			wLevel = wLevel + 1
+		elseif (spell == _E) then
+			eLevel = eLevel + 1
+		elseif (spell == _R) then
+			rLevel = rLevel + 1
+		end
+	end
+	
+	return qLevel, wLevel, eLevel, rLevel
+
+end
+
+---//==================================================\\---
+--|| TickLimiter (Credits to Team TheSource)			||--
+---\\==================================================//---
+
+class "TickLimiter"
+
+function TickLimiter:__init(func, frequency)
+
+    assert(frequency and frequency > 0, "TickLimiter: frecuency is invalid!")
+    assert(func and type(func) == "function", "TickLimiter: func is invalid!")
+
+    self.lasttick = 0
+    self.interval = 1 / frequency
+
+    self.func = func
+    AddTickCallback(function() self:OnTick() end)
+
+end
+
+function TickLimiter:OnTick()
+
+    if os.clock() - self.lasttick >= self.interval then
+        self.func()
+        self.lasttick = os.clock()
+    end
+
+end
